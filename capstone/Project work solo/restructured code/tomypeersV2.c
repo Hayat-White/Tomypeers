@@ -20,7 +20,7 @@ int main(){
     char port[10]; // array for port number
     char command[10]; // this is the command for the terminal
     WSADATA wsaData; // Holds the socket WSADATA from the WSAstartup
-    struct connections servers;
+    struct connections servers[10];
 
 
     
