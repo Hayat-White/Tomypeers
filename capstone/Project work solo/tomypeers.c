@@ -28,7 +28,7 @@ size_t get_filesize(const char* filename); // Grabs the file size of the request
 
 //build a function that takes the data from above and actual write the information to a file
 
-//Functions to remove because functionality just isn't there yet and general purpose is not there
+//Functions to remove because functionality just isn't there yet and general purpose fruitless
 void insert(const char* filename, size_t filesize); // Inserts a new value into the hashmap
 size_t hash_function(const char* filename); //hash function
 void print_hashmap(); // prints hashmap
