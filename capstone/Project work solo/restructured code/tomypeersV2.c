@@ -32,7 +32,7 @@ int main(){
     
 }
 
-// update to handle mutliple connections
+// update to handle mutliple connections (fd_set or something else)
 void* listen_for_connections(void* param) {
     SOCKET listen_socket;
     struct sockaddr_in server_addr;
