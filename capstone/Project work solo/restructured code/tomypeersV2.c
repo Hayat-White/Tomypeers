@@ -13,12 +13,14 @@ struct connections{
 };
 
 void* listen_for_connections(void* param); // Function to listen for incoming connections (runs completely in the background)
+int command_selection();
+
 
 int main(){
     SOCKET connection; // holds information for the current machine
     char host[256]; // array for host(ip) information
     char port[10]; // array for port number
-    char command[10]; // this is the command for the terminal
+    int command = 1;
     WSADATA wsaData; // Holds the socket WSADATA from the WSAstartup
     struct connections servers[10];
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -27,7 +29,17 @@ int main(){
     }
 
     _beginthreadex(NULL, 0, listen_for_connections, NULL, 0, NULL); // Starts the listening in the background
-
+    //add functions for commands instead of blocks
+    /*Command values:
+        upload_list = 2
+        connect = 1
+        exit = 0
+        error = 1;
+    */
+    do{
+        command = command_selection();
+        
+    }while(command != 0);
 
     
 }
@@ -156,4 +168,21 @@ void* listen_for_connections(void* param) {
     closesocket(listen_socket);
 
     return NULL;
+}
+
+int command_selection(){
+    char command[10];
+    printf("Enter command (exit, connect, upload_list)> ");
+    scanf("%s",command);
+    if(strcmp(command, "upload_list") == 0){
+        return 2;
+    }    
+    if(strcmp(command, "connect") == 0){
+        return 1;
+    }
+    if(strcmp(command, "exit") == 0){
+        return 0;
+    }
+    return -1;
+
 }
