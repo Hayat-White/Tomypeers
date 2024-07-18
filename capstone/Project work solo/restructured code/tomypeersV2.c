@@ -13,6 +13,7 @@ struct connections{
 };
 
 void* listen_for_connections(void* param); // Function to listen for incoming connections (runs completely in the background)
+void establlish_connection(struct sockaddr_in *server_connecting);
 int command_selection();
 
 
@@ -22,26 +23,40 @@ int main(){
     char port[10]; // array for port number
     int command = 1;
     WSADATA wsaData; // Holds the socket WSADATA from the WSAstartup
-    struct connections servers[10];
+    struct sockaddr_in server;
+    struct sockaddr_in *server_connecting = &server;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         printf("WSAStartup failed with error: %d\n", WSAGetLastError());
         return 1;
     }
-
+    if ((connection = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) { // Creates and stores socket information inside of connection
+        printf("Could not create socket: %d\n", WSAGetLastError());
+        return 1;
+    }
+    
     _beginthreadex(NULL, 0, listen_for_connections, NULL, 0, NULL); // Starts the listening in the background
-    //add functions for commands instead of blocks
+    //add function for commands instead of blocks
     /*Command values:
         upload_list = 2
         connect = 1
         exit = 0
-        error = 1;
+        error = -1
     */
     do{
         command = command_selection();
-        
+        if(command == 1){
+            establish_connection(server_connecting);
+        }else if(command == 2){
+
+        }else if(command = -1){
+            printf("Incorrect command: failed with error\n");
+        }
     }while(command != 0);
 
     
+}
+void establlish_connection(struct sockaddr_in *server_connecting){
+
 }
 
 // update to handle mutliple connections (fd_set or something else)
