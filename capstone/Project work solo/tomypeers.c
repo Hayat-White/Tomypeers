@@ -133,7 +133,7 @@ int main() {
                                     //Write the data to the file once again
                                     fwrite(recv_buffer,1,bytes_received,file);
                                     //download progress read out
-                                    if(total_bytes_recv % 10000 == 0){
+                                    if(total_bytes_recv % 10000 == 0){ //doesn't display percentage unless files are certain sizes
                                         double percentage_done = (double)total_bytes_recv/filesize * 100;
                                         printf("\n(%f/100.000000)\n",percentage_done);
                                     }

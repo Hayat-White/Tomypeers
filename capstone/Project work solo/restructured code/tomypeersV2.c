@@ -15,7 +15,7 @@ struct connections{
 void* listen_for_connections(void* param); // Function to listen for incoming connections (runs completely in the background)
 void establlish_connection(struct sockaddr_in *server_connecting);
 int command_selection();
-
+void list_directory(); 
 
 int main(){
     SOCKET connection; // holds information for the current machine
@@ -47,7 +47,7 @@ int main(){
         if(command == 1){
             establish_connection(server_connecting);
         }else if(command == 2){
-
+            list_directory();
         }else if(command = -1){
             printf("Incorrect command: failed with error\n");
         }
@@ -55,8 +55,43 @@ int main(){
 
     
 }
+//function that connects the users together
 void establlish_connection(struct sockaddr_in *server_connecting){
 
+}
+
+void list_directory(){
+    WIN32_FIND_DATA find_file_data;
+    HANDLE hFind = INVALID_HANDLE_VALUE;
+    DWORD dwError;
+
+    // Path to the "upload" directory
+    const char* directory_path = "upload\\*";
+
+    // Find the first file in the directory
+    hFind = FindFirstFile(directory_path, &find_file_data);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        printf("Error listing directory: %d\n", GetLastError());
+        return;
+    }
+
+    // Print the list of files
+    printf("\nFiles in 'upload' directory:\n");
+    do {
+        // Check if it's a file (not a directory)
+        if (!(find_file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            printf("%s (%llu bytes)\n", find_file_data.cFileName,
+                   ((ULONG64)find_file_data.nFileSizeHigh << 32) + find_file_data.nFileSizeLow);
+        }
+    } while (FindNextFile(hFind, &find_file_data) != 0);
+    printf("\n");
+    dwError = GetLastError();
+    if (dwError != ERROR_NO_MORE_FILES) {
+        printf("Error listing directory: %d\n", dwError);
+    }
+
+    // Close the handle
+    FindClose(hFind);
 }
 
 // update to handle mutliple connections (fd_set or something else)
