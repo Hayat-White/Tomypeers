@@ -12,19 +12,27 @@ struct connections{
     struct sockaddr_in address;
 };
 
+// Define a structure for the hashmap node
+typedef struct Node {
+    char filename[256];
+    size_t filesize;
+    struct Node* next;
+} Node;
+
+// Define the hashmap structure
+#define HASH_SIZE 100
+Node* hashmap[HASH_SIZE];
+
 void* listen_for_connections(void* param); // Function to listen for incoming connections (runs completely in the background)
-void establlish_connection(struct sockaddr_in *server_connecting);
+void establish_connection(struct sockaddr_in *server_connecting);
 int command_selection();
 void list_directory(); 
 
 int main(){
     SOCKET connection; // holds information for the current machine
-    char host[256]; // array for host(ip) information
-    char port[10]; // array for port number
     int command = 1;
     WSADATA wsaData; // Holds the socket WSADATA from the WSAstartup
     struct sockaddr_in server;
-    struct sockaddr_in *server_connecting = &server;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         printf("WSAStartup failed with error: %d\n", WSAGetLastError());
         return 1;
@@ -45,7 +53,7 @@ int main(){
     do{
         command = command_selection();
         if(command == 1){
-            establish_connection(server_connecting);
+            establish_connection(server,connection);
         }else if(command == 2){
             list_directory();
         }else if(command = -1){
@@ -56,7 +64,51 @@ int main(){
     
 }
 //function that connects the users together
-void establlish_connection(struct sockaddr_in *server_connecting){
+void establish_connection(struct sockaddr_in server_connecting, SOCKET connection){
+    char host[256]; // array for host(ip) information
+    char port[10]; // array for port number
+
+    printf("Enter ip address to connect to> ");
+    scanf("%s", host);
+    printf("Enter port number to connect to> ");
+    scanf("%s", port);
+
+    if ((connection = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) { // Creates and stores socket information inside of connection
+        printf("Could not create socket: %d\n", WSAGetLastError());
+        return 1;
+    }
+    server_connecting.sin_family = AF_INET; // sets to IPv4
+    server_connecting.sin_addr.s_addr = inet_addr(host); // convert char array of host(ip) address
+    server_connecting.sin_port = htons(atoi(port)); // convert char array of port
+    if (connect(connection, (struct sockaddr *)&server_connecting, sizeof(server_connecting)) < 0) { // Attempts the connection
+        printf("Connection failed\n");
+        return 1;
+    }
+    printf("Connected to server at %s:%s\n", host, port);
+
+    //Capture packets sent by host to display files inside the system
+    char file_info[2048];
+    int bytes_received = recv(connection, file_info, sizeof(file_info), 0);
+    if (bytes_received >= 0) {
+        file_info[bytes_received] = '\0'; // Null-terminate the received data
+        //printf("Bytes received from sending the file system '%i'",bytes_received);
+        printf("\nFiles available for download:\n%s\n", file_info);
+
+        //parse data and populate the hashmap
+        char* token = strtok(file_info,"\n");
+        while(token != NULL){
+            char filename[256];
+            size_t filesize;
+            sscanf(token,"%s (%lu bytes)", filename, &filesize);
+            insert(filename,filesize); //remove the hash table
+            token = strtok(NULL, "\n");
+        }
+    } else {
+        printf("Recv error: %d\n", WSAGetLastError());
+    }
+
+
+
 
 }
 
