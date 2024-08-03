@@ -6,27 +6,14 @@
 #include <windows.h>
 #pragma comment(lib, "ws2_32.lib") // Link with ws2_32.lib
 
-struct connections{
-    uint32_t id;
-    int socket_descriptor;
-    struct sockaddr_in address;
-};
-
-// Define a structure for the hashmap node
-typedef struct Node {
-    char filename[256];
-    size_t filesize;
-    struct Node* next;
-} Node;
-
-// Define the hashmap structure
-#define HASH_SIZE 100
-Node* hashmap[HASH_SIZE];
-
 void* listen_for_connections(void* param); // Function to listen for incoming connections (runs completely in the background)
-void establish_connection(struct sockaddr_in *server_connecting);
-int command_selection();
-void list_directory(); 
+void establish_connection(struct sockaddr_in server_connecting, SOCKET connection); //connects peer to peer
+//Client side functions
+int command_selection(); //finds which command user would like to use
+void list_directory(); //Lists the users files
+//information and data from connections formed
+void recv_and_display_file_list();
+void download_files(SOCKET connection);
 
 int main(){
     SOCKET connection; // holds information for the current machine
@@ -54,6 +41,7 @@ int main(){
         command = command_selection();
         if(command == 1){
             establish_connection(server,connection);
+
         }else if(command == 2){
             list_directory();
         }else if(command = -1){
@@ -63,6 +51,24 @@ int main(){
 
     
 }
+void recv_and_display_file_list(SOCKET connection){
+    char file_info[2048];
+    int bytes_received = recv(connection, file_info, sizeof(file_info), 0);
+    if (bytes_received >= 0) {
+        file_info[bytes_received] = '\0'; // Null-terminate the received data
+        //printf("Bytes received from sending the file system '%i'",bytes_received);
+        printf("\nFiles available for download:\n%s\n", file_info);
+        
+        char* token = strtok(file_info,"\n");
+        while (token != NULL) {
+            printf("%s\n", token);
+            token = strtok(NULL, "\n");
+        }
+    } else {
+        printf("Recv error: %d\n", WSAGetLastError());
+    }
+}
+
 //function that connects the users together
 void establish_connection(struct sockaddr_in server_connecting, SOCKET connection){
     char host[256]; // array for host(ip) information
@@ -87,29 +93,7 @@ void establish_connection(struct sockaddr_in server_connecting, SOCKET connectio
     printf("Connected to server at %s:%s\n", host, port);
 
     //Capture packets sent by host to display files inside the system
-    char file_info[2048];
-    int bytes_received = recv(connection, file_info, sizeof(file_info), 0);
-    if (bytes_received >= 0) {
-        file_info[bytes_received] = '\0'; // Null-terminate the received data
-        //printf("Bytes received from sending the file system '%i'",bytes_received);
-        printf("\nFiles available for download:\n%s\n", file_info);
-
-        //parse data and populate the hashmap
-        char* token = strtok(file_info,"\n");
-        while(token != NULL){
-            char filename[256];
-            size_t filesize;
-            sscanf(token,"%s (%lu bytes)", filename, &filesize);
-            printf("%s",token);
-            token = strtok(NULL, "\n");
-        }
-    } else {
-        printf("Recv error: %d\n", WSAGetLastError());
-    }
-
-
-
-
+    recv_and_display_file_list(connection);
 }
 
 void list_directory(){
