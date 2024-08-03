@@ -5,21 +5,35 @@
 #include <WinSock2.h> // Include Winsock library
 #include <windows.h>
 #pragma comment(lib, "ws2_32.lib") // Link with ws2_32.lib
-
+typedef struct Node {
+    char filename[256];
+    size_t filesize;
+    struct Node* next;
+} Node;
 void* listen_for_connections(void* param); // Function to listen for incoming connections (runs completely in the background)
 void establish_connection(struct sockaddr_in server_connecting, SOCKET connection); //connects peer to peer
+
 //Client side functions
 int command_selection(); //finds which command user would like to use
 void list_directory(); //Lists the users files
+void create_file_list(char* file_list); //creates file list for client server  
+void insert(const char* filename, size_t filesize, Node* hashmap[]);
+size_t hash_function(const char* filename);
+void print_hashmap(Node* hashmap[]); // prints hashmap
 //information and data from connections formed
-void recv_and_display_file_list();
-void download_files(SOCKET connection);
+void recv_and_display_file_list(SOCKET connection, Node* hashmap[]);
+void download_files(SOCKET connection, Node* hashmap[]);
+size_t get_filesize(const char* filename, Node* hashmap[]); // Grabs the file size of the requested file
+
+
+#define total_filecount 100
 
 int main(){
     SOCKET connection; // holds information for the current machine
     int command = 1;
     WSADATA wsaData; // Holds the socket WSADATA from the WSAstartup
     struct sockaddr_in server;
+    Node* hashmap[total_filecount];
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         printf("WSAStartup failed with error: %d\n", WSAGetLastError());
         return 1;
@@ -30,7 +44,7 @@ int main(){
     }
     
     _beginthreadex(NULL, 0, listen_for_connections, NULL, 0, NULL); // Starts the listening in the background
-    //add function for commands instead of blocks
+    
     /*Command values:
         upload_list = 2
         connect = 1
@@ -41,7 +55,9 @@ int main(){
         command = command_selection();
         if(command == 1){
             establish_connection(server,connection);
-
+            //Capture packets sent by host to display files inside the system
+            recv_and_display_file_list(connection,hashmap);
+            download_files(connection,hashmap);
         }else if(command == 2){
             list_directory();
         }else if(command = -1){
@@ -51,17 +67,57 @@ int main(){
 
     
 }
-void recv_and_display_file_list(SOCKET connection){
+void download_files(SOCKET connection, Node* hashmap[]){
+    char recv_buffer[2048]; //contains the data sent from the server
+    char send_buffer[128]; //holds the file wanted from the user
+    do{
+        printf("Enter filename you would like to download(type exit to quit)> ");
+        scanf("%s",send_buffer);
+        if(strcmp(send_buffer, "exit") == 0){
+            return;
+        }
+        memset(send_buffer,0,sizeof(send_buffer));
+        memset(recv_buffer,0,sizeof(recv_buffer));
+        send(connection, send_buffer,strlen(send_buffer),0); // sends the filename to the peer
+        unsigned long total_bytes_recv = 0;
+        int bytes_received=recv(connection, recv_buffer, sizeof(recv_buffer),0);
+        total_bytes_recv += bytes_received;
+        if(bytes_received > 0){
+            recv_buffer[bytes_received] = '\0';
+            if(strcmp(recv_buffer,"File does not exist.") == 0){
+                printf("\nFile Does not exist.\n");
+            }else{
+                char download_path_with_filename[128];
+                snprintf(download_path_with_filename,sizeof(download_path_with_filename),"download/%s",send_buffer);
+                FILE* downloadedfile = fopen(download_path_with_filename, "wb");
+                if(downloadedfile){
+                    fwrite(recv_buffer,1,bytes_received,downloadedfile);
+                    size_t filesize = get_filesize(send_buffer,hashmap);
+                }else{
+                    printf("\nFile error creating '%s'",send_buffer);
+                }
+            }
+
+        }
+    }while(strcmp(send_buffer, "exit") == 0);
+    closesocket(connection);
+    return;
+}
+//function to capture file list sent by peer and display to the screen the contents of upload directory
+void recv_and_display_file_list(SOCKET connection, Node* hashmap[]){
     char file_info[2048];
     int bytes_received = recv(connection, file_info, sizeof(file_info), 0);
     if (bytes_received >= 0) {
         file_info[bytes_received] = '\0'; // Null-terminate the received data
         //printf("Bytes received from sending the file system '%i'",bytes_received);
         printf("\nFiles available for download:\n%s\n", file_info);
-        
+
         char* token = strtok(file_info,"\n");
-        while (token != NULL) {
-            printf("%s\n", token);
+        while(token != NULL){
+            char filename[256];
+            size_t filesize;
+            sscanf(token,"%s (%lu bytes)", filename, &filesize);
+            insert(filename,filesize,hashmap);
             token = strtok(NULL, "\n");
         }
     } else {
@@ -71,8 +127,8 @@ void recv_and_display_file_list(SOCKET connection){
 
 //function that connects the users together
 void establish_connection(struct sockaddr_in server_connecting, SOCKET connection){
-    char host[256]; // array for host(ip) information
-    char port[10]; // array for port number
+    char host[16]; // array for host(ip) information
+    char port[6]; // array for port number
 
     printf("Enter ip address to connect to> ");
     scanf("%s", host);
@@ -91,9 +147,6 @@ void establish_connection(struct sockaddr_in server_connecting, SOCKET connectio
         return 1;
     }
     printf("Connected to server at %s:%s\n", host, port);
-
-    //Capture packets sent by host to display files inside the system
-    recv_and_display_file_list(connection);
 }
 
 void list_directory(){
@@ -129,7 +182,6 @@ void list_directory(){
     // Close the handle
     FindClose(hFind);
 }
-
 // update to handle mutliple connections (fd_set or something else)
 void* listen_for_connections(void* param) {
     SOCKET listen_socket;
@@ -255,7 +307,7 @@ void* listen_for_connections(void* param) {
 
     return NULL;
 }
-
+//Function to grab user commands
 int command_selection(){
     char command[10];
     printf("Enter command (exit, connect, upload_list)> ");
@@ -271,4 +323,88 @@ int command_selection(){
     }
     return -1;
 
+}
+//creates the internal file list for what the server is allowed to send
+void create_file_list(char* file_list) {
+    // List the directory and save it to the file_list
+    // Function to list files in the "upload" directory
+    WIN32_FIND_DATA find_file_data;
+    HANDLE hFind = INVALID_HANDLE_VALUE;
+    DWORD dwError;
+
+    // Path to the "upload" directory
+    const char* directory_path = "upload\\*";
+
+    // Find the first file in the directory
+    hFind = FindFirstFile(directory_path, &find_file_data);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        printf("Error listing directory: %d\n", GetLastError());
+        return;
+    }
+    
+    // Concatenate file names with their sizes into the buffer
+    do {
+        if (strcmp(find_file_data.cFileName, ".") != 0 && strcmp(find_file_data.cFileName, "..") != 0) {
+            char file_info[256];
+            sprintf(file_info, "%s (%lu bytes)\n", find_file_data.cFileName, find_file_data.nFileSizeLow);
+            strcat(file_list, file_info);
+        }
+    } while (FindNextFile(hFind, &find_file_data) != 0);
+
+    dwError = GetLastError();
+    if (dwError != ERROR_NO_MORE_FILES) {
+        printf("Error listing directory: %d\n", dwError);
+    }
+
+    // Close the handle
+    FindClose(hFind);
+}
+
+void insert(const char* filename, size_t filesize, Node* hashmap[]) {
+    size_t index = hash_function(filename);
+
+    // Create a new node
+    Node* newNode = (Node*)malloc(sizeof(Node));
+    if (newNode == NULL) {
+        printf("Memory allocation failed\n");
+        exit(1);
+    }
+    strcpy(newNode->filename, filename);
+    newNode->filesize = filesize;
+    newNode->next = NULL;
+
+    // Insert the new node at the beginning of the linked list at index
+    newNode->next = hashmap[index];
+    hashmap[index] = newNode;
+}
+// Hash function to calculate index based on filename
+size_t hash_function(const char* filename) {
+    size_t hash = 0;
+    for (size_t i = 0; filename[i] != '\0'; i++) {
+        hash = 31 * hash + filename[i];
+    }
+    return hash % total_filecount;
+}
+// Function to retrieve filesize given filename
+size_t get_filesize(const char* filename, Node* hashmap[]) {
+    size_t index = hash_function(filename);
+    Node* current = hashmap[index];
+    while (current != NULL) {
+        if (strcmp(current->filename, filename) == 0) {
+            return current->filesize;
+        }
+        current = current->next;
+    }
+    return 0; // File not found
+}
+//prints the current hashtable
+void print_hashmap(Node* hashmap[]) {
+    printf("Hashmap contents:\n");
+    for (int i = 0; i < total_filecount; i++) {
+        Node* current = hashmap[i];
+        while (current != NULL) {
+            printf("Filename: %s, Filesize: %lu\n", current->filename, current->filesize);
+            current = current->next;
+        }
+    }
 }
