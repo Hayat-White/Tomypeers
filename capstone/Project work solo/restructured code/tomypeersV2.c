@@ -100,7 +100,7 @@ void establish_connection(struct sockaddr_in server_connecting, SOCKET connectio
             char filename[256];
             size_t filesize;
             sscanf(token,"%s (%lu bytes)", filename, &filesize);
-            insert(filename,filesize); //remove the hash table
+            printf("%s",token);
             token = strtok(NULL, "\n");
         }
     } else {
