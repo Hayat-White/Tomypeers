@@ -11,7 +11,7 @@ typedef struct Node {
     struct Node* next;
 } Node;
 void* listen_for_connections(void* param); // Function to listen for incoming connections (runs completely in the background)
-void establish_connection(struct sockaddr_in server_connecting, SOCKET connection); //connects peer to peer
+SOCKET establish_connection(struct sockaddr_in server_connecting, SOCKET connection); //connects peer to peer
 
 //Client side functions
 int command_selection(); //finds which command user would like to use
@@ -30,7 +30,7 @@ size_t get_filesize(const char* filename, Node* hashmap[]); // Grabs the file si
 
 int main(){
     SOCKET connection; // holds information for the current machine
-    int command = 1;
+    int command = 0;
     WSADATA wsaData; // Holds the socket WSADATA from the WSAstartup
     struct sockaddr_in server;
     Node* hashmap[total_filecount];
@@ -54,15 +54,17 @@ int main(){
     do{
         command = command_selection();
         if(command == 1){
-            establish_connection(server,connection);
+            connection = establish_connection(server,connection);
             //Capture packets sent by host to display files inside the system
             recv_and_display_file_list(connection,hashmap);
             download_files(connection,hashmap);
+            closesocket(connection);
         }else if(command == 2){
             list_directory();
         }else if(command = -1){
             printf("Incorrect command: failed with error\n");
         }
+        printf("%i\n",command);
     }while(command != 0);
 
     
@@ -93,6 +95,20 @@ void download_files(SOCKET connection, Node* hashmap[]){
                 if(downloadedfile){
                     fwrite(recv_buffer,1,bytes_received,downloadedfile);
                     size_t filesize = get_filesize(send_buffer,hashmap);
+                    if(filesize != total_bytes_recv){
+                        do{
+                            memset(recv_buffer,0,sizeof(recv_buffer));
+                            bytes_received=recv(connection, recv_buffer, sizeof(recv_buffer),0);
+                            total_bytes_recv += bytes_received;
+                            fwrite(recv_buffer,1,bytes_received,downloadedfile);
+                            if(total_bytes_recv % 10000 == 0){ //doesn't display percentage unless files are certain sizes
+                                double percentage_done = (double)total_bytes_recv/filesize * 100;
+                                printf("\n(%f/100.000000)\n",percentage_done);
+                            }
+                        }while(filesize != total_bytes_recv);
+                    }
+                    fclose(downloadedfile);
+                    printf("\nFile '%s' downloaded successfully.\n",send_buffer);
                 }else{
                     printf("\nFile error creating '%s'",send_buffer);
                 }
@@ -126,7 +142,7 @@ void recv_and_display_file_list(SOCKET connection, Node* hashmap[]){
 }
 
 //function that connects the users together
-void establish_connection(struct sockaddr_in server_connecting, SOCKET connection){
+SOCKET establish_connection(struct sockaddr_in server_connecting, SOCKET connection){
     char host[16]; // array for host(ip) information
     char port[6]; // array for port number
 
@@ -137,16 +153,17 @@ void establish_connection(struct sockaddr_in server_connecting, SOCKET connectio
 
     if ((connection = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) { // Creates and stores socket information inside of connection
         printf("Could not create socket: %d\n", WSAGetLastError());
-        return 1;
+        
     }
     server_connecting.sin_family = AF_INET; // sets to IPv4
     server_connecting.sin_addr.s_addr = inet_addr(host); // convert char array of host(ip) address
     server_connecting.sin_port = htons(atoi(port)); // convert char array of port
     if (connect(connection, (struct sockaddr *)&server_connecting, sizeof(server_connecting)) < 0) { // Attempts the connection
         printf("Connection failed\n");
-        return 1;
+        
     }
     printf("Connected to server at %s:%s\n", host, port);
+    return connection;
 }
 
 void list_directory(){
@@ -181,6 +198,47 @@ void list_directory(){
 
     // Close the handle
     FindClose(hFind);
+}
+//function to send file list
+void send_file_list(SOCKET socket) {
+    // List the directory and send the file list to the client
+    // Function to list files in the "upload" directory
+    WIN32_FIND_DATA find_file_data;
+    HANDLE hFind = INVALID_HANDLE_VALUE;
+    DWORD dwError; // just meant to check the last error message sent
+
+    // Path to the "upload" directory
+    const char* directory_path = "upload\\*";
+
+    // Find the first file in the directory
+    hFind = FindFirstFile(directory_path, &find_file_data);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        printf("Error listing directory: %d\n", GetLastError());
+        return;
+    }
+
+    // Prepare buffer for file list
+    char file_list[1024] = "";
+    
+    // Concatenate file names with their sizes into the buffer
+    do {
+        if (strcmp(find_file_data.cFileName, ".") != 0 && strcmp(find_file_data.cFileName, "..") != 0) {
+            char file_info[256];
+            sprintf(file_info, "%s (%lu bytes)\n", find_file_data.cFileName, find_file_data.nFileSizeLow);
+            strcat(file_list, file_info);
+        }
+    } while (FindNextFile(hFind, &find_file_data) != 0);
+
+    dwError = GetLastError();
+    if (dwError != ERROR_NO_MORE_FILES) {
+        printf("Error listing directory: %d\n", dwError);
+    }
+
+    // Close the handle(pointer index)
+    FindClose(hFind);
+
+    // Send the file list to the client
+    send(socket, file_list, strlen(file_list), 0);
 }
 // update to handle mutliple connections (fd_set or something else)
 void* listen_for_connections(void* param) {
@@ -260,7 +318,7 @@ void* listen_for_connections(void* param) {
         char file_name[128];
         int bytes_received;
         do {
-            printf("\nTRYING TO GRAB THE FILE FROM THE USER\n");
+            printf("\nTRYING TO GRAB THE FILE FOR THE USER\n");
             bytes_received = recv(client_socket, file_name, sizeof(file_name), 0);
             //printf("\nServer has recieved: '%i' bytes\n", bytes_received);
             if (bytes_received > 0) {
@@ -309,20 +367,21 @@ void* listen_for_connections(void* param) {
 }
 //Function to grab user commands
 int command_selection(){
-    char command[10];
+    char command[12];
     printf("Enter command (exit, connect, upload_list)> ");
     scanf("%s",command);
+    
     if(strcmp(command, "upload_list") == 0){
         return 2;
-    }    
-    if(strcmp(command, "connect") == 0){
+    }else if(strcmp(command, "connect") == 0){
         return 1;
     }
-    if(strcmp(command, "exit") == 0){
+    
+    if(strcmp(command[0], "e") == 0){
         return 0;
     }
     return -1;
-
+    
 }
 //creates the internal file list for what the server is allowed to send
 void create_file_list(char* file_list) {
