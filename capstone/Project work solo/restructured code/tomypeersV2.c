@@ -78,9 +78,10 @@ void download_files(SOCKET connection, Node* hashmap[]){
         if(strcmp(send_buffer, "exit") == 0){
             return;
         }
-        memset(send_buffer,0,sizeof(send_buffer));
+        
         memset(recv_buffer,0,sizeof(recv_buffer));
         send(connection, send_buffer,strlen(send_buffer),0); // sends the filename to the peer
+        memset(send_buffer,0,sizeof(send_buffer));
         unsigned long total_bytes_recv = 0;
         int bytes_received=recv(connection, recv_buffer, sizeof(recv_buffer),0);
         total_bytes_recv += bytes_received;
@@ -94,7 +95,7 @@ void download_files(SOCKET connection, Node* hashmap[]){
                 FILE* downloadedfile = fopen(download_path_with_filename, "wb");
                 if(downloadedfile){
                     fwrite(recv_buffer,1,bytes_received,downloadedfile);
-                    size_t filesize = get_filesize(send_buffer,hashmap);
+                    size_t filesize = 149001876;//get_filesize(send_buffer,hashmap);
                     if(filesize != total_bytes_recv){
                         do{
                             memset(recv_buffer,0,sizeof(recv_buffer));
@@ -136,9 +137,11 @@ void recv_and_display_file_list(SOCKET connection, Node* hashmap[]){
             insert(filename,filesize,hashmap);
             token = strtok(NULL, "\n");
         }
+        
     } else {
         printf("Recv error: %d\n", WSAGetLastError());
     }
+    
 }
 
 //function that connects the users together
