@@ -60,6 +60,7 @@ int main(){
             recv_and_display_file_list(connection,start);
             download_files(connection,start);
             closesocket(connection);
+            freelist(start);
         }else if(command == 2){
             list_directory();
         }else if(command = -1){
