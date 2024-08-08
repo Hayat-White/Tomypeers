@@ -6,7 +6,7 @@
 #include <windows.h>
 #pragma comment(lib, "ws2_32.lib") // Link with ws2_32.lib
 typedef struct filenode {
-    char filename[72];
+    char filename[128];
     long filesize;
     struct filenode *next;
 } filenode;
@@ -18,13 +18,13 @@ int command_selection(); //finds which command user would like to use
 void list_directory(); //Lists the users files
 void create_file_list(char* file_list); //creates file list for client server  
 int get_filesize(const char* filename, filenode *start);
-void freeList(filenode *start);
-void printList(filenode *start);
+void freelist(filenode *start);
+void printlist(filenode *start);
 void appendNode(filenode **start, const char filename[72], int filesize);
 filenode* createNode(const char filename[72], int filesize);
 
 //information and data from connections formed
-void recv_and_display_file_list(SOCKET connection, filenode *start);
+filenode* recv_and_display_file_list(SOCKET connection, filenode *start);
 void download_files(SOCKET connection, filenode *start);
 
 
@@ -57,7 +57,7 @@ int main(){
         if(command == 1){
             connection = establish_connection(server,connection);
             //Capture packets sent by host to display files inside the system
-            recv_and_display_file_list(connection,start);
+            start = recv_and_display_file_list(connection,start);
             download_files(connection,start);
             closesocket(connection);
             freelist(start);
@@ -72,20 +72,24 @@ int main(){
     
 }
 void download_files(SOCKET connection, filenode *start){
-    char recv_buffer[2048]; //contains the data sent from the server
+    printlist(start);
+    char recv_buffer[4096]; //contains the data sent from the server
     char send_buffer[128]; //holds the file wanted from the user
     do{
+        memset(send_buffer,0,sizeof(send_buffer));
+        memset(recv_buffer,0,sizeof(recv_buffer));
         printf("Enter filename you would like to download(type exit to quit)> ");
         scanf("%s",send_buffer);
         if(strcmp(send_buffer, "exit") == 0){
-            return;
+            break;
         }
         
         send(connection, send_buffer,strlen(send_buffer),0); // sends the filename to the peer
-        
+        printf("\nSENT THE FILENAME\n");
         unsigned long total_bytes_recv = 0;
         int bytes_received=recv(connection, recv_buffer, sizeof(recv_buffer),0);
         total_bytes_recv += bytes_received;
+        printf("\nInitially RECEIVED THE FILE DATA : %d\n", total_bytes_recv);
         if(bytes_received > 0){
             recv_buffer[bytes_received] = '\0';
             if(strcmp(recv_buffer,"File does not exist.") == 0){
@@ -99,7 +103,8 @@ void download_files(SOCKET connection, filenode *start){
                 if(downloadedfile){
                     printf("\nGRABBING THE REST OF THE DATA.\n");
                     fwrite(recv_buffer,1,bytes_received,downloadedfile);
-                    size_t filesize = get_filesize(send_buffer,start);
+                    int filesize = get_filesize(send_buffer,start);
+                    printf("\nTOTAL SIZE OF FILE DATA: %d\n", filesize);
                     if(filesize != total_bytes_recv){
                         do{
                             memset(recv_buffer,0,sizeof(recv_buffer));
@@ -107,7 +112,7 @@ void download_files(SOCKET connection, filenode *start){
                             total_bytes_recv += bytes_received;
                             fwrite(recv_buffer,1,bytes_received,downloadedfile);
                             if(total_bytes_recv % 10000 == 0){ //doesn't display percentage unless files are certain sizes
-                                double percentage_done = (double)total_bytes_recv/filesize * 100;
+                                double percentage_done = (double)total_bytes_recv/(double)filesize * 100;
                                 printf("\n(%f/100.000000)\n",percentage_done);
                             }
                         }while(filesize != total_bytes_recv);
@@ -120,13 +125,12 @@ void download_files(SOCKET connection, filenode *start){
             }
 
         }
-        memset(send_buffer,0,sizeof(send_buffer));
-        memset(recv_buffer,0,sizeof(recv_buffer));
-    }while(strcmp(send_buffer, "exit") == 0);
+        
+    }while(strcmp(send_buffer, "exit") != 0);
     return;
 }
 //function to capture file list sent by peer and display to the screen the contents of upload directory
-void recv_and_display_file_list(SOCKET connection, filenode *start){
+filenode* recv_and_display_file_list(SOCKET connection, filenode *start){
     char file_info[2048];
     int bytes_received = recv(connection, file_info, sizeof(file_info), 0);
     if (bytes_received >= 0) {
@@ -136,9 +140,9 @@ void recv_and_display_file_list(SOCKET connection, filenode *start){
 
         char* token = strtok(file_info,"\n");
         while(token != NULL){
-            char filename[256];
-            size_t filesize;
-            sscanf(token,"%s (%lu bytes)", filename, &filesize);
+            char filename[72];
+            int filesize;
+            sscanf(token,"%s (%d bytes)", filename, &filesize);
             appendNode(&start, filename,filesize);
             token = strtok(NULL, "\n");
         }
@@ -146,7 +150,8 @@ void recv_and_display_file_list(SOCKET connection, filenode *start){
     } else {
         printf("Recv error: %d\n", WSAGetLastError());
     }
-    
+    printlist(start);
+    return start;
 }
 
 //function that connects the users together
@@ -433,8 +438,8 @@ filenode* createNode(const char filename[72], int filesize) {
         fprintf(stderr, "Memory allocation error\n");
         exit(EXIT_FAILURE);
     }
-    strncpy(newNode->filename, filename, 10);
-    newNode->filename[9] = '\0'; // Ensure null termination
+    strncpy(newNode->filename, filename, 72);
+    newNode->filename[71] = '\0'; // Ensure null termination
     newNode->filesize = filesize;
     newNode->next = NULL;
     return newNode;
@@ -455,16 +460,22 @@ void appendNode(filenode **start, const char filename[72], int filesize) {
 }
 
 // Function to print the list
-void printList(filenode *start) {
+void printlist(filenode *start) {
     filenode *temp = start;
-    while (temp != NULL) {
-        printf("Filename: %s, Filesize: %d bytes\n", temp->filename, temp->filesize);
-        temp = temp->next;
+    if(temp == NULL){
+        printf("\nLIST EMPTY\n");    
+    }else{
+        while (temp != NULL) {
+            printf("Filename: %s, Filesize: %d bytes\n", temp->filename, temp->filesize);
+            temp = temp->next;
+        }
     }
+    
+    
 }
 
 // Function to free the list
-void freeList(filenode *start) {
+void freelist(filenode *start) {
     filenode *temp;
     while (start != NULL) {
         temp = start;
