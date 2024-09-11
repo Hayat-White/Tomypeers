@@ -483,7 +483,7 @@ void freelist(filenode *start) {
         free(temp);
     }
 }
-
+//returns the file size desired from the user 
 int get_filesize(const char* filename, filenode *start) {
     filenode* current = start;
     while (current != NULL) {
@@ -492,5 +492,5 @@ int get_filesize(const char* filename, filenode *start) {
         }
         current = current->next;
     }
-    return 0; // File not found
+    return 0; // File not found should never trip
 }
